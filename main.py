@@ -4,6 +4,7 @@ from glob import glob
 from os import environ, getenv
 from datetime import datetime
 from aiogram import Bot, Dispatcher, executor, types
+from aiogram.types.input_file import InputFile
 import logging
 import ffmpeg
 from sql import Admin
@@ -23,6 +24,11 @@ cam_settings = {'saturation': 200,
                 'sleep': 10.0,
                 'record': False,
                 'last_photo': ''}
+cam = cv2.VideoCapture(cam_settings['cam'])
+cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+cam.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+cam.set(cv2.CAP_PROP_AUTOFOCUS, 0)
 
 
 def cam_set(cam_id: int):
@@ -32,9 +38,6 @@ def cam_set(cam_id: int):
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
     cam.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
     cam.set(cv2.CAP_PROP_AUTOFOCUS, 0)
-
-
-cam = cv2.VideoCapture(cam_settings['cam'])
 
 
 def is_admin(user_id: int):
@@ -67,6 +70,9 @@ async def start(message: types.Message):
 # start the record
 @dp.message_handler(commands=['start_record'])
 async def start_record(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer('You have no permission')
+        return
     if cam_settings['record']:
         await message.answer('Have already started.')
     else:
@@ -78,6 +84,9 @@ async def start_record(message: types.Message):
 # stop the record
 @dp.message_handler(commands=['stop_record'])
 async def stop_record(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer('You have no permission')
+        return
     if not cam_settings['record']:
         await message.answer('Have already stopped.')
     else:
@@ -88,6 +97,9 @@ async def stop_record(message: types.Message):
 # camera settings
 @dp.message_handler(commands=['settings'])
 async def settings(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer('You have no permission')
+        return
     if len(text := message.text.split()) == 1 or len(text) % 2 == 0:
         await message.answer('Example:\n'
                              '/settings saturation 200 focus 90 exposure -7.5 gain 40 sleep 10\n'
@@ -110,6 +122,9 @@ async def settings(message: types.Message):
 # camera changing
 @dp.message_handler(commands=['camera'])
 async def cam_changing(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer('You have no permission')
+        return
     if len(text := message.text.split()) > 1 and text[1].isdigit():
         cam_set(int(text[1]))
         await message.answer('Changed.')
@@ -120,26 +135,37 @@ async def cam_changing(message: types.Message):
 # last photo
 @dp.message_handler(commands=['last_photo'])
 async def last_photo(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer('You have no permission')
+        return
     if cam_settings['last_photo'] == '':
         try:
             cam_settings['last_photo'] = glob('*.png')[-1]
         except IndexError:
-            await message.reply('Have no photo.')
+            await message.answer('Have no photo.')
             return
-    await bot.send_document(message.from_user.id, cam_settings['last_photo'], caption=cam_settings['last_photo'])
+    file = InputFile(cam_settings['last_photo'])
+    await bot.send_photo(message.from_user.id, file, caption=f'{datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
+    file = InputFile(cam_settings['last_photo'])
+    await bot.send_document(message.from_user.id, file, caption=cam_settings['last_photo'])
 
 
 # make photo
 @dp.message_handler(commands=['make_photo'])
 async def make_photo(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer('You have no permission')
+        return
     result = False
     while not result:
         photo()
         await sleep(3)
         result, image = photo()
     cv2.imwrite('tmp.png', image)
-    await bot.send_document(message.from_user.id, 'tmp.png',
-                            caption=f'{datetime.now().strftime("%Y/%m/%d %H:%M:%S")}.png')
+    file = InputFile('tmp.png')
+    await bot.send_photo(message.from_user.id, file, caption=f'{datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
+    file = InputFile('tmp.png')
+    await bot.send_document(message.from_user.id, file, caption=f'{datetime.now().strftime("%Y/%m/%d %H:%M:%S")}')
 
 
 def render(message, begin, end, fps, preset, crf):
@@ -163,9 +189,10 @@ def render(message, begin, end, fps, preset, crf):
                     pix_fmt='yuv420p')
             .run())
     except ValueError:
-        message.reply('Something wrong...')
+        message.answer('Something wrong...')
     else:
-        bot.send_document(message.from_user.id, filename, caption=filename)
+        file = InputFile(filename)
+        bot.send_document(message.from_user.id, file, caption=filename)
     finally:
         for file in renamed.keys():
             os.rename(file, renamed[file])
@@ -174,6 +201,9 @@ def render(message, begin, end, fps, preset, crf):
 # camera settings
 @dp.message_handler(commands=['video'])
 async def video(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer('You have no permission')
+        return
     if len(text := message.text.split()) != 6:
         await message.answer('Usage:\n/video start end fps preset crf\nExample:\n'
                              '/video 2022.02.02.12.55.57.png 2022.02.02.13.55.50.png 60 slow 28')
