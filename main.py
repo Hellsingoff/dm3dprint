@@ -77,8 +77,8 @@ async def start_record(message: types.Message):
         await message.answer('Have already started.')
     else:
         cam_settings['record'] = True
-        await record()
         await message.answer('Started.')
+        await record()
 
 
 # stop the record
@@ -115,7 +115,7 @@ async def settings(message: types.Message):
                         cam_settings[text[key]] = float(text[key + 1])
                     except ValueError:
                         continue
-                await message.answer(f'{text[key]} = {key+1}')
+                await message.answer(f'{text[key]} = {text[key + 1]}')
         cam_settings['sleep'] = max(0.95, cam_settings['sleep'] - 0.05)
 
 
@@ -172,9 +172,12 @@ def render(message, begin, end, fps, preset, crf):
     renamed = dict()
     files = glob('*.png')
     first, last = files.index(begin), files.index(end)
+    if -1 in (first, last):
+        message.answer('Filename error...')
+        return
     counter = 1
     for file in files[first:last+1]:
-        os.rename(file, new_name := f'{0 * (9 - len(str(counter)))}{str(counter)}')
+        os.rename(file, new_name := f'{"0" * (9 - len(str(counter)))}{str(counter)}.png')
         renamed[new_name] = file
         counter += 1
     try:
